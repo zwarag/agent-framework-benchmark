@@ -253,13 +253,36 @@ async function testApp(iterDir, mode) {
   log(`Tests done:  ${path.basename(iterDir)} (${code === 0 ? 'pass' : `fail, exit ${code}`})`);
 }
 
+function hitUsageLimit(iterDir) {
+  const file = path.join(iterDir, 'agent/transcript.jsonl');
+  if (!fs.existsSync(file)) return false;
+  const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    try {
+      const e = JSON.parse(lines[i]);
+      if (e.type === 'result') return Boolean(e.is_error) && /usage limit|rate limit|limit reached|quota/i.test(String(e.result ?? ''));
+    } catch {}
+  }
+  return false;
+}
+
 async function runAgents(runId, runDir, matrix, credential) {
   for (let round = 0; round < config.iterations; round++) {
     for (const cell of matrix) {
+      if (fs.existsSync(path.join(runDir, 'STOP'))) {
+        log(`STOP file found in ${runDir}; no more agents start`);
+        return;
+      }
       let i = 1;
       while (fs.existsSync(path.join(runDir, `${cell.key}-${i}`))) i++;
       const dir = path.join(runDir, `${cell.key}-${i}`);
       await runAgent(runId, dir, cell, credential);
+      if (hitUsageLimit(dir)) {
+        fs.writeFileSync(path.join(runDir, 'STOP'), `usage limit hit in ${path.basename(dir)}\n`);
+        fs.writeFileSync(path.join(dir, 'USAGE_LIMIT'), 'the agent stopped on a usage limit; exclude this iteration\n');
+        log(`Usage limit hit in ${path.basename(dir)}; stopping`);
+        return;
+      }
       await testApp(dir, cell.mode);
     }
   }
