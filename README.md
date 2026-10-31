@@ -50,7 +50,9 @@ Agents, and the apps they write, only ever run inside containers.
 | Option | Default | |
 | --- | --- | --- |
 | `--frameworks=a,b` or `all` | (required) | Keys from `bench/frameworks.mjs`: `next`, `nuxt`, `tanstack-start`, `react-router`, `solidstart`, `sveltekit`, `angular`, `astro`, `qwik`, `gracile`, `hono-htmx`, `vanilla` |
-| `--iterations=N` | 1 | Agent runs per framework |
+| `--modes=ssr,csr` or `all` | `all` | Rendering modes. Pairs a framework doesn't support (see `bench/frameworks.mjs`) are skipped |
+| `--tooling=on,off` or `all` | `all` | Official AI tooling installed or not. `off` only for frameworks that have tooling |
+| `--iterations=N` | 1 | Agent runs per cell (framework × mode × tooling), interleaved round by round |
 | `--model=ID` | `claude-opus-5-5` | Passed to `claude --model` |
 | `--effort=LEVEL` | `medium` | Passed to `claude --effort` (`low`, `medium`, `high`, `xhigh`, `max`) |
 | `--claude-version=V` | `2.1.310` | Claude Code version installed in the agent image |
