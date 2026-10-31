@@ -11,7 +11,8 @@ export default defineConfig({
   outputDir: '../test-results',
   use: {
     ...devices['Desktop Chrome'],
-    baseURL: process.env.BASE_URL ?? 'http://localhost:3100',
+    baseURL: process.env.BASE_URL ?? 'http://pokedex.test:3100',
+    launchOptions: { args: ['--host-resolver-rules=MAP *.test 127.0.0.1'] },
     trace: 'retain-on-failure',
   },
 });

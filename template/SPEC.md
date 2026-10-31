@@ -33,7 +33,24 @@ API server. The browser can reach the API at that same URL. Run `npm install` in
 before either command; the harness does the same.
 
 Assume a reverse proxy will sit in front of your server in production and handle HTTPS,
-HTTP/2 and compression. Don't implement any of those.
+HTTP/2 and compression. Don't implement any of those. The proxy passes the public hostname
+through, so your server is reached under a hostname other than `localhost` (the tests use
+`http://pokedex.test:<port>`). Don't reject requests based on the `Host` header.
+
+## Rendering mode
+
+Your instructions name a rendering mode, `ssr` or `csr`. The same value is in the
+environment variable `RENDER_MODE` when you work and when the tests run. The tests check
+the mode by loading pages in a browser with JavaScript disabled.
+
+- **`ssr`**: the HTML response for every page already contains that page's content
+  (heading, text, tables, lists, links). With JavaScript disabled, every page shows its
+  data, including filtered views such as `/?type=fire`. Hydration, islands and client-side
+  navigation after the first load are allowed.
+- **`csr`**: the server sends no API data. Every page's HTML is an application shell, and
+  the browser fetches the data from `API_BASE_URL` and renders it. With JavaScript disabled,
+  no page shows any API data. The server must still answer every page URL (for example by
+  serving the shell for unknown paths), so deep links work.
 
 ## The API
 

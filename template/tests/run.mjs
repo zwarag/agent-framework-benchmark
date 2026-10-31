@@ -19,7 +19,8 @@ const APP_DIR = path.resolve(ROOT, process.env.APP_DIR ?? 'app');
 const API_PORT = Number(process.env.API_PORT ?? 9100);
 const APP_PORT = Number(process.env.APP_PORT ?? 3100);
 const API_BASE_URL = `http://localhost:${API_PORT}`;
-const APP_URL = `http://localhost:${APP_PORT}`;
+const APP_URL = `http://pokedex.test:${APP_PORT}`;
+const APP_READY_URL = `http://localhost:${APP_PORT}`;
 const OVERLAY = path.join(ROOT, 'tests/fixtures/live-data-overlay.json');
 
 const children = new Set();
@@ -110,7 +111,7 @@ try {
   await waitFor(`${API_BASE_URL}/api/v2/`, api, 30_000);
 
   const app = start('App', 'npm', ['start'], { cwd: APP_DIR, env: appEnv });
-  await waitFor(APP_URL, app, 60_000);
+  await waitFor(APP_READY_URL, app, 60_000);
 
   const pw = spawnSync(
     'npx',

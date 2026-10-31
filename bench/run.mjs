@@ -15,13 +15,15 @@
 // inside containers. The host needs Podman and Node 20+.
 //
 // Usage:
-//   node bench/run.mjs --frameworks=vanilla,astro [--iterations=1] [options]
+//   node bench/run.mjs --frameworks=vanilla,astro [--modes=ssr,csr] [--tooling=on,off] [--iterations=1] [options]
 //   node bench/run.mjs --frameworks=all --append-to=runs/<id>   add iterations to an earlier run
 //   node bench/run.mjs --measure-only=runs/<id>     re-measure and re-report an earlier run
 //   node bench/run.mjs --report-only=runs/<id>      only regenerate report.md
 // Options:
 //   --frameworks=a,b|all    frameworks to test (keys in bench/frameworks.mjs)
-//   --iterations=N          agent runs per framework (default 1)
+//   --modes=ssr,csr|all     rendering modes (default all); unsupported framework/mode pairs are skipped
+//   --tooling=on,off|all    official AI tooling installed or not (default all)
+//   --iterations=N          agent runs per cell, one cell after another per round (default 1)
 //   --model=ID              model passed to `claude --model` (default claude-opus-5-5)
 //   --effort=LEVEL          effort passed to `claude --effort` (default medium)
 //   --claude-version=V      Claude Code npm version for the agent image (default 2.1.310)
@@ -45,7 +47,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FRAMEWORKS, prompt } from './frameworks.mjs';
+import { FRAMEWORKS, RENDER_MODES, TOOLING, cells, prompt } from './frameworks.mjs';
 import { readRunInfo, writeReport } from './report.mjs';
 
 const BENCH = path.dirname(fileURLToPath(import.meta.url));
@@ -192,20 +194,22 @@ function recordImages(runDir, key, images) {
 
 // ---------- Step 2: agents ----------
 
-async function runAgent(runId, iterDir, framework, credential) {
+async function runAgent(runId, iterDir, cell, credential) {
   const out = path.join(iterDir, 'agent');
   writableDir(out);
   const name = `pokedex-${runId}-${path.basename(iterDir)}`;
   const args = [
     'run', '--rm', '--name', name, ...containerArgs, ...blockPokeapi,
     '-v', `${out}:/out:Z`,
-    '-e', 'FRAMEWORK', '-e', 'PROMPT', '-e', 'MODEL', '-e', 'EFFORT', '-e', credential,
+    '-e', 'FRAMEWORK', '-e', 'RENDER_MODE', '-e', 'TOOLING', '-e', 'PROMPT', '-e', 'MODEL', '-e', 'EFFORT', '-e', credential,
     IMAGES.agent,
   ];
   const env = {
     ...process.env,
-    FRAMEWORK: framework,
-    PROMPT: prompt(FRAMEWORKS[framework]),
+    FRAMEWORK: cell.framework,
+    RENDER_MODE: cell.mode,
+    TOOLING: cell.tooling,
+    PROMPT: prompt(FRAMEWORKS[cell.framework].label, cell.mode),
     MODEL: config.model,
     EFFORT: config.effort,
   };
@@ -235,28 +239,28 @@ function extractRepo(iterDir) {
 // Runs the original tests against the agent's app/ in a fresh pokedex-base container. Only
 // app/ is copied in, so changes to tests/, data/ or node_modules, or servers the agent left
 // running, can't affect the result. Appends final_test_exit to agent/run-info.txt.
-async function testApp(iterDir) {
+async function testApp(iterDir, mode) {
   if (!fs.existsSync(path.join(iterDir, 'agent/repo.tar.gz'))) return;
   const app = path.join(extractRepo(iterDir), 'app');
   fs.mkdirSync(app, { recursive: true }); // without an app, the tests fail with "No app found"
   log(`Tests start: ${path.basename(iterDir)}`);
   const code = await runLogged(
     'podman',
-    ['run', '--rm', ...containerArgs, ...blockPokeapi, '-v', `${app}:/src:ro,Z`, IMAGES.base, 'bash', '-c', 'cp -r /src app && npm test'],
+    ['run', '--rm', ...containerArgs, ...blockPokeapi, '-e', `RENDER_MODE=${mode}`, '-v', `${app}:/src:ro,Z`, IMAGES.base, 'bash', '-c', 'cp -r /src app && npm test'],
     path.join(iterDir, 'agent/final-test.log'),
   );
   fs.appendFileSync(path.join(iterDir, 'agent/run-info.txt'), `final_test_exit=${code}\n`);
   log(`Tests done:  ${path.basename(iterDir)} (${code === 0 ? 'pass' : `fail, exit ${code}`})`);
 }
 
-async function runAgents(runId, runDir, frameworks, credential) {
-  for (const fw of frameworks) {
-    for (let i = 1, added = 0; added < config.iterations; i++) {
-      const dir = path.join(runDir, `${fw}-${i}`);
-      if (fs.existsSync(dir)) continue; // an existing iteration (--append-to)
-      added++;
-      await runAgent(runId, dir, fw, credential);
-      await testApp(dir);
+async function runAgents(runId, runDir, matrix, credential) {
+  for (let round = 0; round < config.iterations; round++) {
+    for (const cell of matrix) {
+      let i = 1;
+      while (fs.existsSync(path.join(runDir, `${cell.key}-${i}`))) i++;
+      const dir = path.join(runDir, `${cell.key}-${i}`);
+      await runAgent(runId, dir, cell, credential);
+      await testApp(dir, cell.mode);
     }
   }
 }
@@ -285,6 +289,7 @@ async function measure(iterDir) {
     'podman',
     [
       'run', '--rm', ...containerArgs,
+      '-e', `RENDER_MODE=${readRunInfo(path.join(iterDir, 'agent/run-info.txt')).render_mode ?? ''}`,
       '-v', `${repo}:/repo:Z`, '-v', `${results}:/results:Z`,
       IMAGES.measure, '/repo/app', '/results', '--runs', String(config.lighthouseRuns),
     ],
@@ -331,6 +336,15 @@ async function main() {
   const frameworks = opts.frameworks === 'all' ? Object.keys(FRAMEWORKS) : String(opts.frameworks).split(',').map((s) => s.trim());
   const unknown = frameworks.filter((f) => !FRAMEWORKS[f]);
   if (unknown.length) throw new Error(`Unknown framework(s): ${unknown.join(', ')}. Choose from: ${Object.keys(FRAMEWORKS).join(', ')}`);
+  const list = (key, all) => (opts[key] === undefined || opts[key] === 'all' ? all : String(opts[key]).split(',').map((s) => s.trim()));
+  const modes = list('modes', Object.keys(RENDER_MODES));
+  const tooling = list('tooling', TOOLING);
+  const badModes = modes.filter((m) => !RENDER_MODES[m]);
+  if (badModes.length) throw new Error(`Unknown mode(s): ${badModes.join(', ')}. Choose from: ${Object.keys(RENDER_MODES).join(', ')}`);
+  const badTooling = tooling.filter((t) => !TOOLING.includes(t));
+  if (badTooling.length) throw new Error(`Unknown tooling value(s): ${badTooling.join(', ')}. Choose from: ${TOOLING.join(', ')}`);
+  const matrix = cells(frameworks, modes, tooling);
+  if (!matrix.length) throw new Error('The chosen frameworks, modes and tooling give no cells');
   const credential = credentialName();
 
   const runId = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
@@ -340,7 +354,10 @@ async function main() {
   const batch = {
     ...config,
     frameworks,
-    prompts: Object.fromEntries(frameworks.map((f) => [f, prompt(FRAMEWORKS[f])])),
+    modes,
+    tooling,
+    cells: matrix.map((c) => c.key),
+    prompts: Object.fromEntries(matrix.map((c) => [c.key, prompt(FRAMEWORKS[c.framework].label, c.mode)])),
     startedAt: new Date().toISOString(),
     nodeVersion: NODE_VERSION,
     ...harnessState(),
@@ -357,10 +374,11 @@ async function main() {
   }
   fs.mkdirSync(runDir, { recursive: true });
   fs.writeFileSync(configFile, JSON.stringify(runConfig, null, 2));
-  log(`Run ${runId}: ${frameworks.join(', ')} x ${config.iterations} -> ${runDir}`);
+  log(`Run ${runId}: ${matrix.length} cells x ${config.iterations} -> ${runDir}`);
+  for (const c of matrix) log(`  ${c.key}`);
 
   if (!opts['skip-image-build']) buildImages(runDir, appendTo ? { key: `${appendKey}-images` } : {});
-  await runAgents(runId, runDir, frameworks, credential);
+  await runAgents(runId, runDir, matrix, credential);
   if (!opts['no-measure']) await measureAll(runDir);
   writeReport(runDir);
   log(`Report: ${path.join(runDir, 'report.md')}`);

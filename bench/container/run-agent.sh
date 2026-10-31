@@ -18,10 +18,21 @@ OUT=/out
 WORK=/home/agent/work
 mkdir -p "$OUT"
 
-/home/agent/setup-tooling.sh "$FRAMEWORK" /home/agent/mcp.json "$OUT/tooling-versions.json" > "$OUT/tooling.log" 2>&1
+: "${RENDER_MODE:?RENDER_MODE is required}"
+: "${TOOLING:?TOOLING is required}"
+export RENDER_MODE
+if [ "$TOOLING" = on ]; then
+  /home/agent/setup-tooling.sh "$FRAMEWORK" /home/agent/mcp.json "$OUT/tooling-versions.json" > "$OUT/tooling.log" 2>&1
+else
+  echo '{ "mcpServers": {} }' > /home/agent/mcp.json
+  echo '[]' > "$OUT/tooling-versions.json"
+  echo "Tooling off" > "$OUT/tooling.log"
+fi
 
 {
   echo "framework=$FRAMEWORK"
+  echo "render_mode=$RENDER_MODE"
+  echo "tooling=$TOOLING"
   echo "prompt=$PROMPT"
   echo "model=$MODEL"
   echo "effort=$EFFORT"
@@ -37,7 +48,7 @@ cd "$WORK"
 # --strict-mcp-config ignores every MCP server not in mcp.json, including ones that come
 # from plugins, so it's left off for frameworks whose tooling is a plugin.
 STRICT_MCP=(--strict-mcp-config)
-if [ "$FRAMEWORK" = sveltekit ]; then STRICT_MCP=(); fi
+if [ "$FRAMEWORK" = sveltekit ] && [ "$TOOLING" = on ]; then STRICT_MCP=(); fi
 set +e
 claude -p "$PROMPT" \
   --model "$MODEL" --effort "$EFFORT" \

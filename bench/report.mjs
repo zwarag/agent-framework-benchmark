@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { summarizeTranscript } from './tokens.mjs';
+import { parseCell } from './frameworks.mjs';
 
 export function readRunInfo(file) {
   if (!fs.existsSync(file)) return {};
@@ -75,6 +76,7 @@ function metrics(it) {
 
 const COLUMNS = [
   ['Tests', (r) => `${r.passed}/${r.n}`],
+  ['Measured', (r) => `${r.measured}/${r.n}`],
   ['Total tokens (M)', (r) => fmt(r.tokens, 2, 1e-6)],
   ['Cache read (M)', (r) => fmt(r.cacheReadTokens, 2, 1e-6)],
   ['Uncached input (k)', (r) => fmt(r.uncachedInputTokens, 0, 1e-3)],
@@ -121,24 +123,25 @@ export function writeReport(runDir) {
 
   const byFramework = new Map();
   for (const it of iterations) {
-    const fw = it.info.framework ?? it.dir.replace(/-\d+$/, '');
+    const fw = it.dir.replace(/-\d+$/, '');
     if (!byFramework.has(fw)) byFramework.set(fw, []);
     byFramework.get(fw).push(it);
   }
 
   const rows = [...byFramework].map(([fw, its]) => {
     const ms = its.map(metrics);
-    const row = { framework: fw, n: its.length, passed: ms.filter((m) => m.testsPassed).length };
+    const cell = parseCell(fw) ?? { framework: fw, mode: '?', tooling: '?' };
+    const row = { cell: fw, ...cell, n: its.length, passed: ms.filter((m) => m.testsPassed).length, measured: its.filter((it) => it.measure).length };
     for (const key of Object.keys(ms[0])) if (key !== 'testsPassed') row[key] = median(ms.map((m) => m[key]));
     return row;
   });
-  rows.sort((a, b) => (a.tokens ?? Infinity) - (b.tokens ?? Infinity));
+  rows.sort((a, b) => a.mode.localeCompare(b.mode) || (a.tokens ?? Infinity) - (b.tokens ?? Infinity));
 
   const table = (cols) =>
     [
-      `| Framework | ${cols.map(([h]) => h).join(' | ')} |`,
-      `| --- | ${cols.map(() => '---:').join(' | ')} |`,
-      ...rows.map((r) => `| ${r.framework} | ${cols.map(([, f]) => f(r)).join(' | ')} |`),
+      `| Framework | Mode | Tooling | ${cols.map(([h]) => h).join(' | ')} |`,
+      `| --- | --- | --- | ${cols.map(() => '---:').join(' | ')} |`,
+      ...rows.map((r) => `| ${r.framework} | ${r.mode} | ${r.tooling} | ${cols.map(([, f]) => f(r)).join(' | ')} |`),
     ].join('\n');
 
   const versions = iterations
@@ -148,27 +151,27 @@ export function writeReport(runDir) {
   const md = `# Pokédex framework benchmark
 
 Run \`${path.basename(runDir)}\`, started ${config.startedAt ?? '—'}.
-${config.iterations ?? '?'} iteration(s) per framework; numbers are medians across iterations.
+${config.iterations ?? '?'} iteration(s) per cell (framework x rendering mode x tooling); numbers are medians across iterations.\nCells are grouped by rendering mode: compare frameworks within one mode, and one framework across modes.
 Lighthouse values are for the home page (\`/\`): the median of ${config.lighthouseRuns ?? '?'} runs, taken per metric, so LCP
 and TBT can come from different runs. Each iteration's measure/results.json has all 6 URLs.
-Sorted by total tokens.
+Sorted by mode, then total tokens.
 
 ## Building the app (agent)
 
 Total tokens = cache reads + uncached input (input and cache writes) + output.
 
-${table(COLUMNS.slice(0, 8))}
+${table(COLUMNS.slice(0, 9))}
 
 ## Page loads (Lighthouse, mobile settings)
 
-${table(COLUMNS.slice(8, 15))}
+${table(COLUMNS.slice(9, 16))}
 
 ## Code
 
 Non-blank lines in the app's source files (comments included). Not counted: JSON, lockfiles,
 tests, generated files, and verbatim copies of the provided design files.
 
-${table(COLUMNS.slice(15))}
+${table(COLUMNS.slice(16))}
 
 ## Versions
 
