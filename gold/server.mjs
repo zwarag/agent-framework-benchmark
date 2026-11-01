@@ -13,6 +13,8 @@ const API = (process.env.API_BASE_URL ?? 'http://localhost:9000').replace(/\/$/,
 const PAGE_SIZE = 48;
 const EXCLUDED_TYPES = new Set(['stellar', 'unknown', 'shadow']);
 const LEARN_METHOD_ORDER = ['level-up', 'machine', 'egg', 'tutor'];
+const FEATURES = new Set((process.env.GOLD_FEATURES ?? '').split(',').filter(Boolean));
+const has = (f) => FEATURES.has(f);
 
 const STATIC = {
   '/styles.css': [path.join(ROOT, 'public/styles.css'), 'text/css'],
@@ -180,6 +182,7 @@ async function homePage(url) {
   const q = (url.searchParams.get('q') ?? '').trim();
   const type = url.searchParams.get('type') ?? '';
   const generation = url.searchParams.get('generation') ?? '';
+  const sort = has('m3') && url.searchParams.get('sort') === 'name' ? 'name' : '';
   const [species, types, labels, generations] = await Promise.all([
     allSpecies(),
     typesByPokemon(),
@@ -196,6 +199,7 @@ async function homePage(url) {
       (!type || types.get(s.id)?.some((t) => t.name === type)) &&
       (!genIds || genIds.has(s.id)),
   );
+  if (sort === 'name') matches.sort((a, b) => humanize(a.name).localeCompare(humanize(b.name)));
   const totalPages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
   const page = Math.min(Math.max(1, parseInt(url.searchParams.get('page') ?? '1', 10) || 1), totalPages);
   const shown = matches.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -205,6 +209,7 @@ async function homePage(url) {
     if (q) params.set('q', q);
     if (type) params.set('type', type);
     if (generation) params.set('generation', generation);
+    if (sort) params.set('sort', sort);
     if (n > 1) params.set('page', n);
     const s = params.toString();
     return s ? `/?${s}` : '/';
@@ -230,6 +235,13 @@ async function homePage(url) {
       ${generations.map((g) => html`<option value="${g.name}"${raw(g.name === generation ? ' selected' : '')}>${en(g.names)}</option>`)}
     </select>
   </div>
+  ${has('m3') ? raw(html`<div class="field">
+    <label for="sort">Sort</label>
+    <select id="sort" name="sort">
+      <option value="">Dex number</option>
+      <option value="name"${raw(sort === 'name' ? ' selected' : '')}>Name</option>
+    </select>
+  </div>`) : ''}
 </form>
 <div id="results">
   <p class="count">${matches.length} Pokémon</p>
@@ -258,10 +270,12 @@ const STAT_LABELS = { hp: 'HP', attack: 'Attack', defense: 'Defense', 'special-a
 
 async function pokemonPage(name, url) {
   const species = await api(`pokemon-species/${encodeURIComponent(name)}`);
-  const [pokemon, chain, labels] = await Promise.all([
+  const [pokemon, chain, labels, generation, growth] = await Promise.all([
     api(`pokemon/${species.id}`),
     api(species.evolution_chain.url),
     typeLabels(),
+    api(`generation/${species.generation.name}`),
+    Promise.resolve(species.growth_rate?.name),
   ]);
   const title = en(species.names);
 
@@ -321,10 +335,13 @@ async function pokemonPage(name, url) {
     <p class="hero__number">${dexNumber(species.id)}</p>
     <h1>${title}</h1>
     <p class="hero__genus">${en(species.genera, 'genus')}</p>
+    ${has('m2') ? raw(html`<p><a href="/generations/${generation.name}">${en(generation.names)}</a></p>`) : ''}
     <p class="type-list">${pokemon.types.map((t) => typeBadge(t.type.name, labels.get(t.type.name) ?? humanize(t.type.name), true))}</p>
     <dl class="facts">
       <div><dt>Height</dt><dd>${(pokemon.height / 10).toFixed(1)} m</dd></div>
       <div><dt>Weight</dt><dd>${(pokemon.weight / 10).toFixed(1)} kg</dd></div>
+      ${has('m1') ? raw(html`<div><dt>Capture rate</dt><dd>${species.capture_rate}</dd></div>
+      <div><dt>Growth rate</dt><dd>${growth ? humanize(growth) : '—'}</dd></div>`) : ''}
     </dl>
     <p class="hero__flavor">${latestFlavor(species.flavor_text_entries) ?? '—'}</p>
   </div>
@@ -366,8 +383,31 @@ ${raw(section('evolution', 'Evolution', html`<ul class="evolution">${evolutionTr
   return layout({ title: pageTitle(title), body });
 }
 
+const cardTypes = async () => (has('m4') ? { types: await typesByPokemon(), labels: await typeLabels() } : null);
+const cardOpts = (ct, id, extra) => (ct ? { types: ct.types.get(id) ?? [], labels: ct.labels, extra } : { extra });
+
+async function generationPage(name) {
+  const gen = await api(`generation/${encodeURIComponent(name)}`);
+  const ct = await cardTypes();
+  const title = en(gen.names) ?? humanize(gen.name);
+  const members = await toSpecies(gen.pokemon_species);
+  const body = html`<h1>${title}</h1>
+<dl class="facts facts--panel">
+  <div><dt>Region</dt><dd>${humanize(gen.main_region.name)}</dd></div>
+</dl>
+${raw(
+  section(
+    'pokemon',
+    'Pokémon',
+    html`<p class="count">${members.length} Pokémon</p><ul class="card-grid">${members.map((m) => pokemonCard(m.species, cardOpts(ct, m.species.id)))}</ul>`,
+  ),
+)}`;
+  return layout({ title: pageTitle(title), body });
+}
+
 async function movePage(name) {
   const [move, labels] = await Promise.all([api(`move/${encodeURIComponent(name)}`), typeLabels()]);
+  const ct = await cardTypes();
   const title = en(move.names) ?? humanize(move.name);
   const learners = await toSpecies(move.learned_by_pokemon);
   const effect = en(move.effect_entries, 'short_effect') ?? latestFlavor(move.flavor_text_entries) ?? '—';
@@ -384,7 +424,7 @@ ${raw(
   section(
     'learned-by',
     'Learned by',
-    html`<p class="count">${learners.length} Pokémon</p><ul class="card-grid">${learners.map((l) => pokemonCard(l.species))}</ul>`,
+    html`<p class="count">${learners.length} Pokémon</p><ul class="card-grid">${learners.map((l) => pokemonCard(l.species, cardOpts(ct, l.species.id)))}</ul>`,
   ),
 )}`;
   return layout({ title: pageTitle(title), body });
@@ -392,6 +432,7 @@ ${raw(
 
 async function abilityPage(name) {
   const ability = await api(`ability/${encodeURIComponent(name)}`);
+  const ct = await cardTypes();
   const title = en(ability.names) ?? humanize(ability.name);
   const holders = await toSpecies(ability.pokemon);
   const body = html`<h1>${title}</h1>
@@ -401,7 +442,7 @@ ${raw(
     'pokemon',
     'Pokémon',
     html`<p class="count">${holders.length} Pokémon</p><ul class="card-grid">${holders.map((h) =>
-      pokemonCard(h.species, { extra: h.ref.is_hidden ? 'Hidden ability' : '' }),
+      pokemonCard(h.species, cardOpts(ct, h.species.id, h.ref.is_hidden ? 'Hidden ability' : '')),
     )}</ul>`,
   ),
 )}`;
@@ -426,6 +467,7 @@ const RELATIONS = [
 
 async function typePage(name) {
   const [type, labels] = await Promise.all([api(`type/${encodeURIComponent(name)}`), typeLabels()]);
+  const ct = await cardTypes();
   const title = en(type.names) ?? humanize(type.name);
   const members = await toSpecies(type.pokemon);
   const moves = [...type.moves].sort((a, b) => a.name.localeCompare(b.name));
@@ -447,7 +489,7 @@ ${raw(
   section(
     'pokemon',
     'Pokémon',
-    html`<p class="count">${members.length} Pokémon</p><ul class="card-grid">${members.map((m) => pokemonCard(m.species))}</ul>`,
+    html`<p class="count">${members.length} Pokémon</p><ul class="card-grid">${members.map((m) => pokemonCard(m.species, cardOpts(ct, m.species.id)))}</ul>`,
   ),
 )}
 ${raw(
@@ -480,6 +522,7 @@ async function route(url) {
     if (kind === 'moves') return movePage(name);
     if (kind === 'abilities') return abilityPage(name);
     if (kind === 'types') return typePage(name);
+    if (kind === 'generations' && has('m2')) return generationPage(name);
   }
   return notFoundPage();
 }
