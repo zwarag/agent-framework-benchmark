@@ -31,11 +31,13 @@ test.describe('Pokémon list', () => {
     await expect(page.getByRole('searchbox', { name: 'Search' })).toBeVisible();
 
     const type = page.getByLabel('Type', { exact: true });
+    await expect(type.locator('option')).toHaveCount(TYPES.length + 1);
     const typeOptions = await type.locator('option').allInnerTexts();
     expect(typeOptions[0].trim()).toBe('All types');
     expect(typeOptions.slice(1).map((t) => t.trim()).sort()).toEqual([...TYPES].sort());
 
     const generation = page.getByLabel('Generation', { exact: true });
+    await expect(generation.locator('option')).toHaveCount(GENERATIONS.length + 1);
     const genOptions = (await generation.locator('option').allInnerTexts()).map((t) => t.trim());
     expect(genOptions).toEqual(['All generations', ...GENERATIONS]);
   });
