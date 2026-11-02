@@ -1,0 +1,67 @@
+{
+  "iterations": 3,
+  "cpus": 4,
+  "memory": "8g",
+  "agentTimeoutMin": 240,
+  "lighthouseRuns": 5,
+  "model": "claude-opus-5-5",
+  "effort": "high",
+  "claudeVersion": "2.1.310",
+  "frameworks": [
+    "angular",
+    "next",
+    "sveltekit",
+    "vanilla"
+  ],
+  "modes": [
+    "ssr",
+    "csr"
+  ],
+  "tooling": [
+    "on",
+    "off"
+  ],
+  "cells": [
+    "angular.ssr.tools-on",
+    "angular.ssr.tools-off",
+    "angular.csr.tools-on",
+    "angular.csr.tools-off",
+    "next.ssr.tools-on",
+    "next.ssr.tools-off",
+    "next.csr.tools-on",
+    "next.csr.tools-off",
+    "sveltekit.ssr.tools-on",
+    "sveltekit.ssr.tools-off",
+    "sveltekit.csr.tools-on",
+    "sveltekit.csr.tools-off",
+    "vanilla.ssr.tools-off",
+    "vanilla.csr.tools-off"
+  ],
+  "prompts": {
+    "angular.ssr.tools-on": "Implement the app described in SPEC.md using Angular, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "angular.ssr.tools-off": "Implement the app described in SPEC.md using Angular, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "angular.csr.tools-on": "Implement the app described in SPEC.md using Angular, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "angular.csr.tools-off": "Implement the app described in SPEC.md using Angular, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "next.ssr.tools-on": "Implement the app described in SPEC.md using Next.js, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "next.ssr.tools-off": "Implement the app described in SPEC.md using Next.js, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "next.csr.tools-on": "Implement the app described in SPEC.md using Next.js, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "next.csr.tools-off": "Implement the app described in SPEC.md using Next.js, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "sveltekit.ssr.tools-on": "Implement the app described in SPEC.md using SvelteKit, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "sveltekit.ssr.tools-off": "Implement the app described in SPEC.md using SvelteKit, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "sveltekit.csr.tools-on": "Implement the app described in SPEC.md using SvelteKit, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "sveltekit.csr.tools-off": "Implement the app described in SPEC.md using SvelteKit, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "vanilla.ssr.tools-off": "Implement the app described in SPEC.md using vanilla JavaScript or TypeScript with Vite, without a UI framework, with server-side rendering (rendering mode `ssr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes.",
+    "vanilla.csr.tools-off": "Implement the app described in SPEC.md using vanilla JavaScript or TypeScript with Vite, without a UI framework, with client-side rendering (rendering mode `csr`, see \"Rendering mode\" in SPEC.md). Use the latest stable version. Work autonomously until `npm test` passes."
+  },
+  "startedAt": "2026-10-31T18:06:44.454Z",
+  "nodeVersion": "24.22.1",
+  "harnessCommit": "1944760061f5d34b6450b420ff8d7bc565b679ff",
+  "harnessDirty": false,
+  "podman": "podman version 5.8.7",
+  "images": {
+    "ubuntu": "sha256:78d4744ead1f5b19b04d0df558ab182a5300903900755e515b2ca4d10eb2044d",
+    "pokedex-base": "f64ed556a98088effe5996f86848678ac6e65e33d6225c8582e78a02a7c02a98",
+    "pokedex-agent": "d1abfa4734b4d541d0dd6245444958450a1790ade13e0d94d8a8e3edd735778d",
+    "pokedex-measure": "1c732a9812a9aec4357748b8911c415fb85f0407f5aae13deda33d9df3c4b4f1"
+  }
+}

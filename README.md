@@ -1,5 +1,14 @@
 # Agent framework benchmark
 
+> [!NOTE]
+> **This fork** (branch `v2-render-tooling`) changes the original in four ways:
+> 1. The rendering mode (`ssr` or `csr`) is part of the prompt and the spec, and a no-JavaScript test checks it. In the original, agents chose the mode, so the ranking mostly compared SSR with CSR.
+> 2. Official AI tooling can be switched `on` or `off`. A cell is framework × mode × tooling.
+> 3. Tests run under `pokedex.test` and a random hostname instead of `localhost`. In the original run, two Angular apps passed every test and then failed only in measurement, because Angular SSR rejects unknown `Host` headers. Now the agent sees that failure while it can still fix it.
+> 4. A maintenance phase (`bench/maintain.mjs`, `maintenance/`) gives each app four change requests, each to a fresh agent session.
+>
+> Pilot results: [`results/20261031-180644/`](results/20261031-180644/README.md).
+
 > [!NOTE]  
 > This is an AI-generated project. If you don't want to read AI-authored prose, stop reading now.
 
